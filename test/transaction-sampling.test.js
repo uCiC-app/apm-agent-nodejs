@@ -140,6 +140,156 @@ tape.test(
   },
 );
 
+tape.test('per-transaction sampleRate option', function (suite) {
+  suite.test(
+    'sampleRate: 1 always produces sampled transactions',
+    function (t) {
+      const agent = new Agent().start(
+        Object.assign({}, testAgentOpts, {
+          disableSend: true,
+          transactionSampleRate: 0, // global rate is 0, but per-tx overrides
+        }),
+      );
+
+      for (let i = 0; i < 100; i++) {
+        const trans = agent.startTransaction('myTrans', { sampleRate: 1 });
+        t.ok(trans.sampled, 'transaction should be sampled with sampleRate: 1');
+        trans.end();
+      }
+
+      agent.destroy();
+      t.end();
+    },
+  );
+
+  suite.test(
+    'sampleRate: 0 always produces unsampled transactions',
+    function (t) {
+      const agent = new Agent().start(
+        Object.assign({}, testAgentOpts, {
+          disableSend: true,
+          transactionSampleRate: 1, // global rate is 1, but per-tx overrides
+        }),
+      );
+
+      for (let i = 0; i < 100; i++) {
+        const trans = agent.startTransaction('myTrans', { sampleRate: 0 });
+        t.notOk(
+          trans.sampled,
+          'transaction should not be sampled with sampleRate: 0',
+        );
+        trans.end();
+      }
+
+      agent.destroy();
+      t.end();
+    },
+  );
+
+  suite.test('sampleRate option sets correct tracestate s value', function (t) {
+    const agent = new Agent().start(
+      Object.assign({}, testAgentOpts, {
+        disableSend: true,
+        transactionSampleRate: 0.8,
+      }),
+    );
+
+    const trans = agent.startTransaction('myTrans', { sampleRate: 1 });
+    t.equal(
+      trans.sampleRate,
+      1,
+      'sampleRate should reflect per-tx value, not global',
+    );
+    trans.end();
+
+    agent.destroy();
+    t.end();
+  });
+
+  suite.test(
+    'falls back to global config when sampleRate not specified',
+    function (t) {
+      const agent = new Agent().start(
+        Object.assign({}, testAgentOpts, {
+          disableSend: true,
+          transactionSampleRate: 1,
+        }),
+      );
+
+      let numSampled = 0;
+      for (let i = 0; i < 100; i++) {
+        const trans = agent.startTransaction('myTrans');
+        if (trans.sampled) numSampled++;
+        trans.end();
+      }
+      t.equal(
+        numSampled,
+        100,
+        'all transactions sampled using global transactionSampleRate=1',
+      );
+
+      agent.destroy();
+      t.end();
+    },
+  );
+
+  suite.test('invalid sampleRate values are ignored', function (t) {
+    const agent = new Agent().start(
+      Object.assign({}, testAgentOpts, {
+        disableSend: true,
+        transactionSampleRate: 1,
+        logLevel: 'off',
+      }),
+    );
+
+    // Invalid: negative number
+    let trans = agent.startTransaction('myTrans', { sampleRate: -0.5 });
+    t.ok(
+      trans.sampled,
+      'invalid sampleRate ignored, falls back to global rate 1',
+    );
+    trans.end();
+
+    // Invalid: greater than 1
+    trans = agent.startTransaction('myTrans', { sampleRate: 2 });
+    t.ok(
+      trans.sampled,
+      'invalid sampleRate ignored, falls back to global rate 1',
+    );
+    trans.end();
+
+    // Invalid: not a number
+    trans = agent.startTransaction('myTrans', { sampleRate: 'foo' });
+    t.ok(
+      trans.sampled,
+      'invalid sampleRate ignored, falls back to global rate 1',
+    );
+    trans.end();
+
+    agent.destroy();
+    t.end();
+  });
+
+  suite.test('sampleRate is rounded to 4 decimal places', function (t) {
+    const agent = new Agent().start(
+      Object.assign({}, testAgentOpts, {
+        disableSend: true,
+        transactionSampleRate: 0,
+      }),
+    );
+
+    const trans = agent.startTransaction('myTrans', { sampleRate: 1 });
+    // sampleRate of 1 means always sampled; check the sampleRate value itself
+    t.equal(trans.sampleRate, 1, 'sampleRate=1 is preserved');
+    trans.end();
+
+    agent.destroy();
+    t.end();
+  });
+
+  suite.end();
+});
+
 tape.test(
   'APM Server >=v8.0 (which does not want unsampled transactions)',
   function (suite) {

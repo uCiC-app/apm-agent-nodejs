@@ -364,6 +364,9 @@ declare namespace apm {
     childOf?: Transaction | Span | string;
     tracestate?: string; // A W3C trace-context 'tracestate' string.
     links?: Link[];
+    // A number from 0 to 1 that overrides the global `transactionSampleRate`
+    // config for this transaction. Only applies to root transactions.
+    sampleRate?: number;
   }
 
   export interface SpanOptions {
